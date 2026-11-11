@@ -260,25 +260,34 @@ async function runOptimization() {
   await loadSessions(1);
 }
 
+// Formate une heure flottante (ex. 23.75) en "HH:MM"
+function fmtHourLabel(h) {
+  const totalMin = Math.round(((h % 24) + 24) % 24 * 60) % 1440;
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+  const mm = String(totalMin % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function renderScheduleChart(schedule) {
   const ctx = document.getElementById("chart-schedule");
   if (charts.schedule) charts.schedule.destroy();
   charts.schedule = new Chart(ctx, {
     type: "line",
     data: {
-      labels: schedule.map((s) => s.hour.toFixed(2) + "h"),
+      labels: schedule.map((s) => fmtHourLabel(s.hour)),
       datasets: [
-        { label: "Charge (kW)", data: schedule.map((s) => s.charge_kw), borderColor: "#16A34A", backgroundColor: "#16A34A33", fill: true, tension: 0.25, pointRadius: 0, yAxisID: "y" },
-        { label: "Décharge V2G (kW)", data: schedule.map((s) => -s.discharge_kw), borderColor: "#65A30D", backgroundColor: "#65A30D33", fill: true, tension: 0.25, pointRadius: 0, yAxisID: "y" },
-        { label: "SoC (%)", data: schedule.map((s) => s.soc_pct), borderColor: "#0F766E", borderDash: [4, 3], pointRadius: 0, yAxisID: "y1" },
+        { label: "Charge (kW)", data: schedule.map((s) => s.charge_kw), borderColor: "#16A34A", backgroundColor: "#16A34A33", fill: true, tension: 0, stepped: true, pointRadius: 0, yAxisID: "y" },
+        { label: "Décharge V2G (kW)", data: schedule.map((s) => -s.discharge_kw), borderColor: "#65A30D", backgroundColor: "#65A30D33", fill: true, tension: 0, stepped: true, pointRadius: 0, yAxisID: "y" },
+        { label: "SoC (%)", data: schedule.map((s) => s.soc_pct), borderColor: "#0F766E", borderDash: [4, 3], tension: 0, stepped: true, pointRadius: 0, yAxisID: "y1" },
       ],
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: "#E4EFE7" }, ticks: { color: "#5B7264", maxTicksLimit: 10, font: { size: 10 } } },
+        x: { grid: { color: "#E4EFE7" }, ticks: { color: "#5B7264", maxTicksLimit: 12, font: { size: 10 } }, title: { display: true, text: "Heure", color: "#5B7264" } },
         y: { position: "left", grid: { color: "#E4EFE7" }, ticks: { color: "#5B7264", font: { size: 10 } }, title: { display: true, text: "kW", color: "#5B7264" } },
         y1: { position: "right", grid: { display: false }, min: 0, max: 100, ticks: { color: "#5B7264", font: { size: 10 } }, title: { display: true, text: "SoC %", color: "#5B7264" } },
       },
