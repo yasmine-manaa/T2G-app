@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Environnements virtuels
+venv/
+.venv/
+env/
+
+# Bases de données et données générées
+backend/data/*.db
+backend/data/*.sqlite*
+*.db-journal
+
+# Secrets / config locale
+.env
+.env.*
+!.env.example
+
+# Node (si jamais utilisé)
+node_modules/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Artefacts temporaires
+*.log

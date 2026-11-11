@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: t2g_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: t2g_db
+      POSTGRES_USER: t2g_user
+      POSTGRES_PASSWORD: t2g_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - t2g_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U t2g_user -d t2g_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: t2g_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://t2g_user:t2g_pass@db:5432/t2g_db
+      SECRET_KEY: change-this-in-production
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./dataset:/dataset
+    command: >
+      sh -c "python seed.py &&
+             gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 app:app"
+
+  frontend:
+    build: ./frontend
+    container_name: t2g_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  t2g_pgdata:

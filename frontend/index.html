@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T2G · Smart EV Charging &amp; Transport-to-Grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#F3F8F4; --surface:#FFFFFF; --surface-alt:#EDF4EE; --border:#D8E6DC;
+    --text:#16301F; --muted:#5B7264; --muted-2:#8AA094;
+    --charge:#16A34A; --discharge:#65A30D; --danger:#DC2626; --grid-line:#E4EFE7;
+    --accent:#0F766E; --shadow:0 2px 10px rgba(22,101,52,.06);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Inter',sans-serif; min-height:100vh;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:48px 48px;
+    background-attachment:fixed;
+  }
+  h1,h2,h3,.num{font-family:'Space Grotesk',sans-serif;}
+  a{color:inherit;}
+  .app{display:grid; grid-template-columns:220px 1fr; min-height:100vh;}
+  .sidebar{
+    background:rgba(255,255,255,0.92); border-right:1px solid var(--border);
+    padding:28px 20px; display:flex; flex-direction:column; gap:6px;
+  }
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:34px;}
+  .brand-mark{width:30px; height:30px; border-radius:7px;
+    background:linear-gradient(135deg,var(--charge),var(--accent)); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff;}
+  .brand-name{font-weight:600; font-size:16px; letter-spacing:.2px;}
+  .brand-sub{font-size:11px; color:var(--muted-2);}
+  .nav-item{
+    padding:10px 12px; border-radius:8px; color:var(--muted); font-size:14px;
+    cursor:pointer; border-left:2px solid transparent; transition:background .15s;
+  }
+  .nav-item:hover{background:var(--surface-alt); color:var(--text);}
+  .nav-item.active{background:var(--surface-alt); color:var(--text); border-left-color:var(--charge);}
+  .sidebar-foot{margin-top:auto; font-size:12px; color:var(--muted-2); line-height:1.5;}
+
+  main{padding:28px 34px 60px;}
+  .topbar{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:26px; flex-wrap:wrap; gap:14px;}
+  .topbar h1{font-size:22px; font-weight:600;}
+  .topbar p{color:var(--muted); font-size:13.5px; margin-top:4px;}
+  .session-picker{display:flex; gap:10px; align-items:center;}
+  select, button, input{
+    background:var(--surface); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:9px 12px; font-size:13.5px; font-family:inherit;
+  }
+  button{cursor:pointer; font-weight:500;}
+  button.primary{background:var(--charge); color:#fff; border:none;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.ghost:hover{border-color:var(--charge); color:var(--charge);}
+
+  .kpi-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin-bottom:22px;}
+  .kpi{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; position:relative; overflow:hidden;}
+  .kpi::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px;}
+  .kpi.k-cost::before{background:var(--danger);}
+  .kpi.k-gain::before{background:var(--discharge);}
+  .kpi.k-energy::before{background:var(--charge);}
+  .kpi.k-savings::before{background:var(--accent);}
+  .kpi.k-co2::before{background:#15803D;}
+  .kpi-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  .kpi-value{font-size:26px; font-weight:600; margin-top:8px;}
+  .kpi-value small{font-size:14px; font-weight:500; color:var(--muted);}
+  .kpi-delta{font-size:12px; margin-top:6px; color:var(--muted-2);}
+
+  .grid-2{display:grid; grid-template-columns:1.5fr 1fr; gap:16px; margin-bottom:16px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px;}
+  .panel h3{font-size:14px; font-weight:600; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;}
+  .panel h3 .tag{font-size:11px; font-weight:500; color:var(--muted); text-transform:none; background:var(--surface-alt); padding:3px 8px; border-radius:6px;}
+  canvas{max-height:280px;}
+
+  .legend-row{display:flex; gap:18px; font-size:12px; color:var(--muted); margin-top:10px;}
+  .legend-dot{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--border); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;}
+  td{padding:9px 10px; border-bottom:1px solid var(--grid-line);}
+  tr:hover td{background:var(--surface-alt);}
+  .badge{padding:2px 8px; border-radius:5px; font-size:11px; font-weight:600;}
+  .badge.classique{background:#2a2f45; color:#aab1cc;}
+  .badge.v1g{background:rgba(57,214,196,.15); color:var(--charge);}
+  .badge.v2g{background:rgba(101,163,13,.15); color:var(--discharge);}
+
+  .empty{color:var(--muted-2); font-size:13px; padding:20px; text-align:center;}
+  .login-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center;}
+  .login-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:36px; width:360px;}
+  .login-card h2{font-size:19px; margin-bottom:6px;}
+  .login-card p{color:var(--muted); font-size:13px; margin-bottom:22px;}
+  .login-card label{font-size:12px; color:var(--muted); display:block; margin:12px 0 5px;}
+  .login-card input{width:100%;}
+  .login-card button{width:100%; margin-top:18px;}
+  .login-tabs{display:flex; gap:8px; margin-bottom:8px;}
+  .login-tab{flex:1; padding:9px; font-size:13px; background:var(--surface-alt); color:var(--muted); border:1px solid var(--border);}
+  .login-tab.active{background:var(--charge); color:#fff; border-color:var(--charge); font-weight:600;}
+  .hint{font-size:12px; color:var(--muted-2); margin-top:14px; line-height:1.5;}
+  .error{color:var(--danger); font-size:12.5px; margin-top:10px; min-height:16px;}
+  .hidden{display:none !important;}
+  .switch-row{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted);}
+  .switch{position:relative; width:38px; height:20px; background:var(--surface-alt); border:1px solid var(--border); border-radius:20px; cursor:pointer;}
+  .switch .knob{position:absolute; top:1px; left:1px; width:16px; height:16px; border-radius:50%; background:var(--muted-2); transition:.2s;}
+  .switch.on{background:rgba(22,163,74,.2); border-color:var(--charge);}
+  .switch.on .knob{left:19px; background:var(--charge);}
+  
+  /* Dynamic views */
+  .view{display:none;}
+  .view.active{display:block;}
+  .view-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;}
+  .view-title{font-size:18px; font-weight:600;}
+  .view-actions{display:flex; gap:10px;}
+  
+  /* Forms */
+  .form-group{margin-bottom:16px;}
+  .form-group label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
+  .form-group input, .form-group select{width:100%;}
+  .form-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  
+  /* Cards */
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px;}
+  .card-title{font-size:14px; font-weight:600; margin-bottom:8px; display:flex; justify-content:space-between;}
+  .card-actions{display:flex; gap:8px;}
+  .card-actions button{padding:6px 10px; font-size:12px;}
+  
+  /* Modal */
+  .modal-overlay{position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(22,50,31,.45); display:none; align-items:center; justify-content:center; z-index:1000;}
+  .modal-overlay.active{display:flex;}
+  .modal{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; width:400px; max-width:90vw;}
+  .modal-title{font-size:16px; font-weight:600; margin-bottom:16px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
+  
+  /* Analytics */
+  .analytics-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px;}
+  .analytics-card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px;}
+  .analytics-value{font-size:24px; font-weight:600; margin-top:8px;}
+  .analytics-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  
+  /* Settings */
+  .settings-section{margin-bottom:24px;}
+  .settings-title{font-size:14px; font-weight:600; margin-bottom:12px; color:var(--text);}
+  .settings-item{display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--surface-alt); border-radius:8px; margin-bottom:8px;}
+  .settings-item-label{font-size:13px; color:var(--text);}
+  .settings-item-desc{font-size:11px; color:var(--muted-2); margin-top:2px;}
+
+  /* ===== Chatbot T2G ===== */
+  .chat-fab{
+    position:fixed; right:24px; bottom:24px; width:56px; height:56px; border-radius:50%;
+    background:linear-gradient(135deg,var(--charge),var(--accent)); color:#fff; border:none;
+    font-size:24px; cursor:pointer; box-shadow:0 6px 20px rgba(22,163,74,.35);
+    display:flex; align-items:center; justify-content:center; z-index:900;
+    transition:transform .15s;
+  }
+  .chat-fab:hover{transform:scale(1.06);}
+  .chat-panel{
+    position:fixed; right:24px; bottom:92px; width:380px; max-width:calc(100vw - 32px);
+    height:520px; max-height:calc(100vh - 120px); background:var(--surface);
+    border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow);
+    display:none; flex-direction:column; z-index:900; overflow:hidden;
+  }
+  .chat-panel.open{display:flex;}
+  .chat-header{
+    background:linear-gradient(135deg,var(--charge),var(--accent)); color:#fff;
+    padding:14px 16px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .chat-header b{font-size:14px;}
+  .chat-header span{font-size:11px; opacity:.85;}
+  .chat-close{background:rgba(255,255,255,.2); border:none; color:#fff; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:14px;}
+  .chat-messages{flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; background:var(--bg);}
+  .msg{max-width:85%; padding:9px 12px; border-radius:12px; font-size:13px; line-height:1.45; white-space:pre-wrap;}
+  .msg.bot{background:var(--surface); border:1px solid var(--border); align-self:flex-start; border-bottom-left-radius:4px;}
+  .msg.user{background:var(--charge); color:#fff; align-self:flex-end; border-bottom-right-radius:4px;}
+  .msg .msg-actions{margin-top:8px;}
+  .chat-suggestions{display:flex; flex-wrap:wrap; gap:6px; padding:10px 14px; border-top:1px solid var(--border); background:var(--surface);}
+  .chip{font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--surface-alt); color:var(--muted); cursor:pointer;}
+  .chip:hover{border-color:var(--charge); color:var(--charge);}
+  .chat-input{display:flex; gap:8px; padding:12px; border-top:1px solid var(--border); background:var(--surface);}
+  .chat-input input{flex:1;}
+  .chat-input button{background:var(--charge); color:#fff; border:none; padding:9px 14px;}
+  .opt-table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+  .opt-table th,.opt-table td{padding:4px 6px; border-bottom:1px solid var(--grid-line); text-align:center;}
+  .opt-table th{color:var(--muted); font-weight:600; font-size:10.5px;}
+</style>
+</head>
+<body>
+
+<div id="login-view" class="login-wrap">
+  <div class="login-card">
+    <h2>T2G · Connexion</h2>
+    <p>Plateforme de recharge intelligente &amp; Transport-to-Grid</p>
+    <div class="login-tabs">
+      <button type="button" id="tab-user" class="login-tab active" onclick="setLoginMode('user')">👤 Utilisateur</button>
+      <button type="button" id="tab-admin" class="login-tab" onclick="setLoginMode('admin')">🛡️ Administrateur</button>
+    </div>
+    <label>Identifiant</label>
+    <input id="login-username" value="demo" placeholder="demo">
+    <label>Mot de passe</label>
+    <input id="login-password" type="password" value="demo1234" placeholder="demo1234">
+    <button class="primary" onclick="login()">Se connecter</button>
+    <div class="error" id="login-error"></div>
+    <div class="hint">Comptes de démonstration (créés par <code>seed.py</code>) :<br>
+    👤 <b>demo / demo1234</b> — espace utilisateur<br>
+    🛡️ <b>admin / admin1234</b> — espace administrateur<br>
+    API : <code id="api-url-hint"></code></div>
+  </div>
+</div>
+
+<div id="app-view" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">⚡</div>
+      <div>
+        <div class="brand-name">T2G Platform</div>
+        <div class="brand-sub">Transport-to-Grid · Tunisie</div>
+      </div>
+    </div>
+    <div class="nav-item active" onclick="showView('dashboard', event)">Tableau de bord</div>
+    <div class="nav-item" onclick="showView('sessions', event)">Sessions de recharge</div>
+    <div class="nav-item" onclick="showView('vehicles', event)">Mes véhicules</div>
+    <div class="nav-item" onclick="showView('bookings', event)">📅 Réservations</div>
+    <div class="nav-item" onclick="showView('map', event)">🗺️ Carte des stations</div>
+    <div class="nav-item" onclick="showView('recommendations', event)">🤖 Conseils IA</div>
+    <div class="nav-item" onclick="showView('analytics', event)">Analyse avancée</div>
+    <div class="nav-item" onclick="showView('profile', event)">Mon profil</div>
+    <div class="nav-item" onclick="showView('settings', event)">Paramètres</div>
+    <div class="nav-item hidden" id="admin-nav" onclick="showView('admin', event)">🛡️ Administration</div>
+    <div class="sidebar-foot">
+      Connecté : <b id="me-username">—</b><br>
+      Solde V2G : <b id="me-balance">0.000</b> TND<br><br>
+      <a href="#" onclick="logout();return false;">Se déconnecter</a>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="view active">
+      <div class="topbar">
+        <div>
+          <h1>Tableau de bord énergétique</h1>
+          <p>Suivi en temps réel des sessions de charge / décharge — devise : Dinar Tunisien (TND)</p>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:4px;">
+            📊 Données : <i>Workplace Charging Experiment</i> (Harvard Dataverse, étude US 2014-15, sessions réelles) —
+            contexte tunisien enrichi (villes, véhicules, tarifs STEG). Voir README.
+          </p>
+        </div>
+        <div class="session-picker">
+          <select id="city-filter" onchange="loadSessions(1)"><option value="">Toutes les villes</option></select>
+          <button class="ghost" onclick="refreshAll()">↻ Actualiser</button>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi k-energy">
+          <div class="kpi-label">Énergie totale livrée</div>
+          <div class="kpi-value" id="kpi-energy">—</div>
+          <div class="kpi-delta" id="kpi-sessions">—</div>
+        </div>
+        <div class="kpi k-cost">
+          <div class="kpi-label">Coût total recharge</div>
+          <div class="kpi-value" id="kpi-cost">—</div>
+          <div class="kpi-delta">Tarif STEG « Trois Postes » (jour/nuit/pointe)</div>
+        </div>
+        <div class="kpi k-gain">
+          <div class="kpi-label">Gains V2G reversés</div>
+          <div class="kpi-value" id="kpi-gain">—</div>
+          <div class="kpi-delta">Revente d'énergie au réseau</div>
+        </div>
+        <div class="kpi k-savings">
+          <div class="kpi-label">SoC moyen (départ → arrivée)</div>
+          <div class="kpi-value" id="kpi-soc">—</div>
+          <div class="kpi-delta">Niveau moyen de batterie</div>
+        </div>
+        <div class="kpi k-co2">
+          <div class="kpi-label">CO₂ évité (estimation)</div>
+          <div class="kpi-value" id="kpi-co2">—</div>
+          <div class="kpi-delta" id="kpi-co2-delta">Impact environnemental</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h3>Sessions par heure de la journée <span class="tag">volume</span></h3>
+          <canvas id="chart-hour"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Répartition par ville <span class="tag">coût TND</span></h3>
+          <canvas id="chart-city"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" id="optim-panel" style="margin-bottom:16px;">
+        <h3>Moteur d'optimisation IA — V1G / V2G <span class="tag">PuLP · programmation linéaire</span></h3>
+        <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+          <span style="font-size:13px; color:var(--muted);">Session sélectionnée : <b id="optim-session-label">—</b></span>
+          <div class="switch-row">
+            <span>Activer V2G</span>
+            <div class="switch on" id="v2g-switch" onclick="toggleV2G()"><div class="knob"></div></div>
+          </div>
+          <button class="primary" onclick="runOptimization()">Lancer l'optimisation</button>
+        </div>
+        <div class="grid-2" style="margin-bottom:0;">
+          <div>
+            <canvas id="chart-schedule"></canvas>
+            <div class="legend-row">
+              <span><span class="legend-dot" style="background:var(--charge)"></span>Puissance de charge P(t)</span>
+              <span><span class="legend-dot" style="background:var(--discharge)"></span>Puissance de décharge (V2G)</span>
+              <span><span class="legend-dot" style="background:#8B93FF"></span>État de charge SoC(t)</span>
+            </div>
+          </div>
+          <div>
+            <div class="kpi k-cost" style="margin-bottom:10px;">
+              <div class="kpi-label">Coût recharge classique (référence)</div>
+              <div class="kpi-value" id="opt-baseline">—</div>
+            </div>
+            <div class="kpi k-savings">
+              <div class="kpi-label">Coût net optimisé (V1G/V2G)</div>
+              <div class="kpi-value" id="opt-net">—</div>
+              <div class="kpi-delta" id="opt-savings">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="sessions-panel">
+        <h3>Sessions récentes <span class="tag" id="sessions-count-tag">—</span></h3>
+        <table>
+          <thead><tr>
+            <th>Session</th><th>Véhicule</th><th>Station</th><th>Début</th>
+            <th>Énergie</th><th>Coût (TND)</th><th>Mode</th><th></th>
+          </tr></thead>
+          <tbody id="sessions-tbody"><tr><td class="empty" colspan="8">Chargement…</td></tr></tbody>
+        </table>
+        <div id="sessions-pagination"></div>
+      </div>
+    </div>
+
+    <!-- Sessions View -->
+    <div id="sessions-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Historique des sessions de recharge</div>
+        <div class="view-actions">
+          <select id="sessions-city-filter" onchange="loadSessionsView(1)"><option value="">Toutes les villes</option></select>
+          <select id="sessions-mode-filter" onchange="loadSessionsView(1)">
+            <option value="">Tous les modes</option>
+            <option value="classique">Classique</option>
+            <option value="v1g">Smart V1G</option>
+            <option value="v2g">V2G</option>
+          </select>
+          <button class="ghost" onclick="exportSessionsCSV()">⬇ Export CSV</button>
+          <button class="ghost" onclick="loadSessionsView(1)">↻ Actualiser</button>
+        </div>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr>
+            <th>Session</th><th>Véhicule</th><th>Station</th><th>Début</th>
+            <th>Énergie</th><th>Coût (TND)</th><th>Mode</th><th>SoC</th><th></th>
+          </tr></thead>
+          <tbody id="sessions-view-tbody"><tr><td class="empty" colspan="9">Chargement…</td></tr></tbody>
+        </table>
+        <div id="sessions-view-pagination"></div>
+      </div>
+    </div>
+
+    <!-- Vehicles View -->
+    <div id="vehicles-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Gestion de mes véhicules</div>
+        <div class="view-actions">
+          <button class="primary" onclick="showVehicleModal()">+ Ajouter un véhicule</button>
+        </div>
+      </div>
+      <div id="vehicles-container">
+        <div class="empty">Chargement des véhicules…</div>
+      </div>
+    </div>
+
+    <!-- Analytics View -->
+    <div id="analytics-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Analyse avancée</div>
+        <div class="view-actions">
+          <button class="ghost" onclick="loadAnalytics()">↻ Actualiser</button>
+        </div>
+      </div>
+      <div class="analytics-grid">
+        <div class="analytics-card">
+          <div class="analytics-label">Sessions ce mois</div>
+          <div class="analytics-value" id="analytics-monthly-sessions">—</div>
+        </div>
+        <div class="analytics-card">
+          <div class="analytics-label">Énergie ce mois (kWh)</div>
+          <div class="analytics-value" id="analytics-monthly-energy">—</div>
+        </div>
+        <div class="analytics-card">
+          <div class="analytics-label">Coût ce mois (TND)</div>
+          <div class="analytics-value" id="analytics-monthly-cost">—</div>
+        </div>
+        <div class="analytics-card">
+          <div class="analytics-label">CO₂ évité ce mois (kg)</div>
+          <div class="analytics-value" id="analytics-monthly-co2" style="color:#15803D;">—</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>Statistiques mensuelles</h3>
+          <canvas id="chart-monthly"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Performance par véhicule</h3>
+          <canvas id="chart-vehicles"></canvas>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Impact CO₂ mensuel <span class="tag">kg évités · réseau tunisien</span></h3>
+        <canvas id="chart-co2" style="max-height:240px;"></canvas>
+      </div>
+    </div>
+
+    <!-- Recommendations View -->
+    <div id="recommendations-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Conseils IA & Prédictions</div>
+        <div class="view-actions">
+          <button class="ghost" onclick="trainMlModel()">Entraîner le ML</button>
+          <button class="ghost" onclick="loadRecommendations()">↻ Actualiser</button>
+        </div>
+      </div>
+      
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>Prédiction de coût de recharge</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Capacité batterie (kWh)</label>
+            <input type="number" id="pred-battery" value="50" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>SoC actuel (%)</label>
+            <input type="number" id="pred-soc-start" value="20" min="0" max="100">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>SoC cible (%)</label>
+            <input type="number" id="pred-soc-target" value="90" min="0" max="100">
+          </div>
+          <div class="form-group">
+            <label>Puissance charge (kW)</label>
+            <input type="number" id="pred-power" value="7.4" step="0.1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Heure de début</label>
+            <input type="datetime-local" id="pred-start-time">
+          </div>
+          <div class="form-group">
+            <label>Température (°C)</label>
+            <input type="number" id="pred-temperature" value="25" step="0.1">
+          </div>
+        </div>
+        <button class="primary" onclick="predictCost()">Prédire le coût</button>
+        
+        <div id="prediction-result" style="margin-top:16px; display:none;">
+          <div class="kpi k-cost">
+            <div class="kpi-label">Coût prédit</div>
+            <div class="kpi-value" id="pred-cost">—</div>
+            <div class="kpi-delta" id="pred-confidence">—</div>
+          </div>
+          <div class="kpi k-energy">
+            <div class="kpi-label">Durée estimée</div>
+            <div class="kpi-value" id="pred-duration">—</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>Meilleurs moments pour charger</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Flexibilité (heures)</label>
+            <input type="number" id="optimal-flexibility" value="24" min="1" max="72">
+          </div>
+          <div class="form-group">
+            <label></label>
+            <button class="primary" onclick="predictOptimalTime()">Trouver les meilleurs moments</button>
+          </div>
+        </div>
+        <div id="optimal-times-result"></div>
+      </div>
+      
+      <div class="panel">
+        <h3>Conseils personnalisés IA <span class="tag" id="advice-meta">—</span></h3>
+        <div id="advice-container">
+          <div class="empty">Chargement des conseils...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile View -->
+    <div id="profile-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Mon profil</div>
+      </div>
+      <div class="panel" style="max-width:600px;">
+        <div class="form-group">
+          <label>Nom d'utilisateur</label>
+          <input type="text" id="profile-username" value="">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="profile-email" value="">
+        </div>
+        <div class="form-group">
+          <label>Type d'utilisateur</label>
+          <select id="profile-user-type">
+            <option value="Résidentiel">Résidentiel</option>
+            <option value="Entreprise/Flotte">Entreprise/Flotte</option>
+            <option value="Public/Commercial">Public/Commercial</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Solde V2G (TND)</label>
+          <input type="text" id="profile-v2g-balance" value="" disabled>
+        </div>
+        <button class="primary" onclick="updateProfile()">Enregistrer les modifications</button>
+      </div>
+      
+      <div class="panel" style="max-width:600px; margin-top:20px;">
+        <h3>Changer le mot de passe</h3>
+        <div class="form-group">
+          <label>Mot de passe actuel</label>
+          <input type="password" id="current-password">
+        </div>
+        <div class="form-group">
+          <label>Nouveau mot de passe</label>
+          <input type="password" id="new-password">
+        </div>
+        <div class="form-group">
+          <label>Confirmer le nouveau mot de passe</label>
+          <input type="password" id="confirm-password">
+        </div>
+        <button class="primary" onclick="changePassword()">Changer le mot de passe</button>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settings-view" class="view">
+      <div class="view-header">
+        <div class="view-title">Paramètres</div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">Optimisation IA</div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-item-label">Poids santé batterie</div>
+            <div class="settings-item-desc">Impact de la santé de batterie sur l'optimisation</div>
+          </div>
+          <select id="setting-health-weight" onchange="saveSettings()">
+            <option value="0.005">Faible (0.005)</option>
+            <option value="0.01" selected>Normal (0.01)</option>
+            <option value="0.02">Élevé (0.02)</option>
+          </select>
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-item-label">Cycles max par session</div>
+            <div class="settings-item-desc">Nombre maximum de transitions charge/décharge</div>
+          </div>
+          <select id="setting-max-cycles" onchange="saveSettings()">
+            <option value="1">1 cycle</option>
+            <option value="2">2 cycles</option>
+            <option value="3" selected>3 cycles</option>
+            <option value="5">5 cycles</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-title">Interface</div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-item-label">Rafraîchissement automatique</div>
+            <div class="settings-item-desc">Mettre à jour les données automatiquement</div>
+          </div>
+          <div class="switch" id="auto-refresh-switch" onclick="toggleAutoRefresh()"><div class="knob"></div></div>
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-item-label">Notifications V2G</div>
+            <div class="settings-item-desc">Alertes lors des opportunités V2G</div>
+          </div>
+          <div class="switch" id="v2g-notif-switch" onclick="toggleV2GNotifications()"><div class="knob"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bookings View -->
+    <div id="bookings-view" class="view">
+      <div class="view-header">
+        <div class="view-title">📅 Réservations de recharge</div>
+        <div class="view-actions">
+          <button class="ghost" onclick="loadBookings()">↻ Actualiser</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>Nouvelle réservation</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Station</label>
+            <select id="booking-station"></select>
+          </div>
+          <div class="form-group">
+            <label>Véhicule</label>
+            <select id="booking-vehicle"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Début</label>
+            <input type="datetime-local" id="booking-start">
+          </div>
+          <div class="form-group">
+            <label>Fin</label>
+            <input type="datetime-local" id="booking-end">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notes (optionnel)</label>
+          <input type="text" id="booking-notes" placeholder="Ex : charge rapide avant trajet">
+        </div>
+        <button class="primary" onclick="createBooking()">Réserver</button>
+        <div class="error" id="booking-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;"></div>
+      </div>
+      <div class="panel">
+        <h3>Mes réservations</h3>
+        <table>
+          <thead><tr>
+            <th>Station</th><th>Ville</th><th>Véhicule</th><th>Début</th><th>Fin</th>
+            <th>Statut</th><th>Notes</th><th></th>
+          </tr></thead>
+          <tbody id="bookings-tbody"><tr><td class="empty" colspan="8">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Map View -->
+    <div id="map-view" class="view">
+      <div class="view-header">
+        <div class="view-title">🗺️ Carte des stations de recharge</div>
+        <div class="view-actions">
+          <select id="map-city-filter" onchange="renderMapMarkers()"><option value="">Toutes les villes</option></select>
+        </div>
+      </div>
+      <div class="panel" style="padding:0; overflow:hidden;">
+        <div id="stations-map" style="height:560px; width:100%;"></div>
+      </div>
+    </div>
+
+    <!-- Admin View -->
+    <div id="admin-view" class="view">
+      <div class="view-header">
+        <div class="view-title">🛡️ Administration — vue globale</div>
+        <div class="view-actions">
+          <button class="ghost" onclick="loadAdmin()">↻ Actualiser</button>
+        </div>
+      </div>
+      <div class="analytics-grid" id="admin-kpis"></div>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>Sessions par ville <span class="tag">global</span></h3>
+          <canvas id="chart-admin-city"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Sessions par mode <span class="tag">global</span></h3>
+          <canvas id="chart-admin-mode"></canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Utilisateurs inscrits <span class="tag" id="admin-users-count">—</span></h3>
+        <table>
+          <thead><tr>
+            <th>Code</th><th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Type</th>
+            <th>Statut</th><th>Sessions</th><th>Énergie (kWh)</th><th>Coût (TND)</th><th>Solde V2G</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="admin-users-tbody"><tr><td class="empty" colspan="11">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Comptes récents</h3>
+        <div id="admin-recent-users"></div>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Journal d'audit <span class="tag">actions admin</span></h3>
+        <table>
+          <thead><tr><th>Date</th><th>Admin</th><th>Action</th><th>Cible</th><th>Détails</th></tr></thead>
+          <tbody id="admin-audit-tbody"><tr><td class="empty" colspan="5">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Étude V1G / V2G globale <span class="tag">potentiel du dataset</span></h3>
+        <p style="color:var(--muted);font-size:13px;">
+          Estimation analytique V1G sur toutes les sessions + optimisation LP réelle V2G sur un échantillon.
+          <button class="ghost" style="margin-left:8px;" id="v2g-study-btn" onclick="runV2GStudy()">Lancer l'étude (~30 s)</button>
+        </p>
+        <div id="v2g-study-result" style="display:none;">
+          <div class="analytics-grid" id="v2g-study-kpis" style="margin-top:12px;"></div>
+          <p id="v2g-study-note" style="color:var(--muted);font-size:12px;margin-top:10px;"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- Vehicle Modal -->
+  <div class="modal-overlay" id="vehicle-modal">
+    <div class="modal">
+      <div class="modal-title" id="vehicle-modal-title">Ajouter un véhicule</div>
+      <div class="form-group">
+        <label>Modèle</label>
+        <select id="vehicle-model">
+          <option value="Dacia Spring">Dacia Spring</option>
+          <option value="Renault Zoe">Renault Zoe</option>
+          <option value="Peugeot e-208">Peugeot e-208</option>
+          <option value="BYD Atto 3">BYD Atto 3</option>
+          <option value="Tesla Model 3">Tesla Model 3</option>
+          <option value="Hyundai Kona Electric">Hyundai Kona Electric</option>
+          <option value="Kia e-Niro">Kia e-Niro</option>
+          <option value="Volkswagen ID.3">Volkswagen ID.3</option>
+          <option value="BMW i3">BMW i3</option>
+          <option value="Mercedes EQA">Mercedes EQA</option>
+          <option value="Audi e-tron">Audi e-tron</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Capacité batterie (kWh)</label>
+          <input type="number" id="vehicle-battery" value="27.4" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Âge véhicule (années)</label>
+          <input type="number" id="vehicle-age" value="0" step="0.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Puissance max charge (kW)</label>
+          <input type="number" id="vehicle-charge-power" value="7.4" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Puissance max décharge (kW)</label>
+          <input type="number" id="vehicle-discharge-power" value="5.0" step="0.1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Rendement batterie</label>
+        <input type="number" id="vehicle-efficiency" value="0.92" step="0.01" min="0.8" max="1.0">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="vehicle-v2g"> Compatible V2G
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" onclick="hideVehicleModal()">Annuler</button>
+        <button class="primary" onclick="saveVehicle()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chatbot T2G -->
+<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Assistant T2G">🤖</button>
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-header">
+    <div><b>Assistant T2G</b><br><span>RAG personnalisé · Agent IA</span></div>
+    <button class="chat-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-suggestions" id="chat-suggestions"></div>
+  <div class="chat-input">
+    <input id="chat-input" placeholder="Posez une question…" onkeydown="if(event.key==='Enter')sendChat()">
+    <button onclick="sendChat()">➤</button>
+  </div>
+</div>
+
+<script src="app.js?v=20261111c"></script>
+</body>
+</html>
