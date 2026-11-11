@@ -1196,9 +1196,9 @@ async function loadMap() {
     }
     if (!stationsMap) {
       stationsMap = L.map("stations-map");
-      // Fond clair CartoDB (assorti au thème, labels plus lisibles qu'OSM)
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        attribution: "© OpenStreetMap © CARTO",
+      // Fond OpenStreetMap (fiable — CartoDB peut être bloqué par certains réseaux)
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap",
         maxZoom: 18,
       }).addTo(stationsMap);
       // Cadrage initial sur la Tunisie (évite Algérie/Sicile/Malte)
