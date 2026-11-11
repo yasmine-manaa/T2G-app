@@ -29,6 +29,19 @@ async function api(path, opts = {}) {
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
   const res = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+  if (res.status === 401) {
+    // Token expiré ou révoqué : retour à la page de connexion
+    localStorage.removeItem("t2g_token");
+    TOKEN = null;
+    CURRENT_USER = null;
+    const appView = document.getElementById("app-view");
+    const loginView = document.getElementById("login-view");
+    if (appView) appView.classList.add("hidden");
+    if (loginView) loginView.classList.remove("hidden");
+    const le = document.getElementById("login-error");
+    if (le) le.textContent = "Session expirée, reconnectez-vous.";
+    throw new Error("Session expirée");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Erreur API (${res.status})`);
@@ -1195,7 +1208,9 @@ async function loadMap() {
     setTimeout(() => stationsMap.invalidateSize(), 150);
   } catch (e) {
     console.error("Erreur carte:", e);
-    container.innerHTML = '<div class="empty" style="padding:40px;">Erreur de chargement : ' + escapeHtml(e.message) + '</div>';
+    container.innerHTML = '<div class="empty" style="padding:40px;text-align:center;">' +
+      'Erreur de chargement : ' + escapeHtml(e.message) + '<br><br>' +
+      '<button class="ghost" onclick="loadMap()">↻ Réessayer</button></div>';
   }
 }
 
