@@ -209,6 +209,15 @@ function renderPagination(containerId, page, pages, fnName) {
 function selectForOptim(id, code) {
   SELECTED_SESSION = id;
   document.getElementById("optim-session-label").textContent = code;
+  // Réinitialiser les résultats précédents pour ne pas afficher les chiffres
+  // d'une autre session sous le nouveau libellé
+  document.getElementById("opt-baseline").textContent = "—";
+  document.getElementById("opt-net").textContent = "—";
+  document.getElementById("opt-savings").textContent = "Lancez l'optimisation pour voir les résultats.";
+  if (charts.schedule) {
+    charts.schedule.destroy();
+    charts.schedule = null;
+  }
   showView('dashboard', null);
   setTimeout(() => {
     document.getElementById("optim-panel").scrollIntoView({ behavior: "smooth" });
@@ -1173,11 +1182,14 @@ async function loadMap() {
       L.Icon.Default._iconFix = true;
     }
     if (!stationsMap) {
-      stationsMap = L.map("stations-map").setView([34.0, 9.5], 7);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap",
+      stationsMap = L.map("stations-map");
+      // Fond clair CartoDB (assorti au thème, labels plus lisibles qu'OSM)
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap © CARTO",
         maxZoom: 18,
       }).addTo(stationsMap);
+      // Cadrage initial sur la Tunisie (évite Algérie/Sicile/Malte)
+      stationsMap.fitBounds([[30.2, 7.5], [37.6, 11.6]], { padding: [30, 30] });
     }
     renderMapMarkers();
     setTimeout(() => stationsMap.invalidateSize(), 150);
