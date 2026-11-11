@@ -127,9 +127,11 @@ crédité mais non requis). Citation recommandée :
 schéma de l'application :
 
 - **Réel, conservé tel quel** : énergie livrée (kWh), taux de charge moyen,
-  identifiants utilisateurs/bornes.
-- **Recentrement temporel** : les dates 2014-2015 sont décalées pour couvrir
-  les ~12 derniers mois (heures de la journée et durées inchangées).
+  identifiants utilisateurs/bornes, et les **patterns horaires**
+  (time-of-day : heures d'arrivée/départ et durées réelles).
+- **Recentrement temporel** : les **dates calendaires** 2014-2015 sont
+  décalées pour couvrir les ~12 derniers mois — les patterns horaires
+  (time-of-day) et les durées sont inchangés.
 - **Enrichi (estimé, documenté dans le script)** : modèle/capacité batterie
   par utilisateur (parc EV tunisien), villes/quartiers des stations (les 25
   sites US sont répartis sur les villes tunisiennes), type de chargeur
